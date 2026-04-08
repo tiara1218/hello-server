@@ -1,25 +1,41 @@
 package com.stu.helloserver.interceptor;
 
+import com.stu.helloserver.common.Result;
+import com.stu.helloserver.common.ResultCode;
+import com.stu.helloserver.utils.JwtUtil;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+@Component
 public class AuthInterceptor implements HandlerInterceptor {
+
+    private static final String AUTHORIZATION_HEADER = "Authorization";
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 尝试从 HTTP 请求头中截获名为 "Authorization" 的隐藏令牌信息
-        String token = request.getHeader("Authorization");
+        // 获取请求头中的 Token
+        String token = request.getHeader(AUTHORIZATION_HEADER);
 
-        // 如果没有携带 Token，直接拦截，不放行到 Controller
-        if (token == null || token.isEmpty()) {
+        // 验证 Token
+        if (token == null || token.isEmpty() || !JwtUtil.validateToken(token)) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
-            // 构造 401 报错的 JSON 字符串返回给前端
-            String errorJson = "{\"code\": 401, \"msg\": \"登录凭证已缺失，请重新登录\"}";
-            response.getWriter().write(errorJson);
-            return false; // 返回 false 表示拦截打回
+
+            Result<Object> errorResult = Result.error(ResultCode.TOKEN_INVALID);
+            ObjectMapper objectMapper = new ObjectMapper();
+            String json = objectMapper.writeValueAsString(errorResult);
+            response.getWriter().write(json);
+
+            return false;
         }
 
-        return true; // 令牌存在，返回 true 予以放行
+        // 将用户名存入请求属性中，供后续使用
+        String username = JwtUtil.extractUsername(token);
+        request.setAttribute("username", username);
+
+        return true;
     }
 }
