@@ -1,7 +1,9 @@
 package com.stu.helloserver.controller;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.stu.helloserver.common.Result;
 import com.stu.helloserver.dto.UserDTO;
+import com.stu.helloserver.entity.User;
 import com.stu.helloserver.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -29,5 +31,13 @@ public class UserController {
     @GetMapping("/{id}")
     public Result<String> getUser(@PathVariable("id") Long id) {
         return userService.getUserById(id);
+    }
+
+    // ========== 4. 新增：分页查询用户列表 ==========
+    @GetMapping("/page")
+    public Result<Page<User>> getUserPage(
+            @RequestParam(defaultValue = "1") Integer pageNum,
+            @RequestParam(defaultValue = "5") Integer pageSize) {
+        return userService.getUserPage(pageNum, pageSize);
     }
 }
