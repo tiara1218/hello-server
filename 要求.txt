@@ -1,0 +1,135 @@
+根据你提供的《任务7: MyBatis-Plus 多表联查与 Redis 缓存集成》文档内容，下面是你需要完成的步骤总结，按顺序实现即可：
+
+✅ 一、环境准备
+1. 添加依赖（pom.xml）
+xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-redis</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+    <scope>provided</scope>
+</dependency>
+<dependency>
+    <groupId>cn.hutool</groupId>
+    <artifactId>hutool-all</artifactId>
+    <version>5.8.25</version>
+</dependency>
+2. 配置 Redis（application.yml）
+yaml
+spring:
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+✅ 二、多表联查实现
+1. 创建 VO（UserDetailVO）
+包含字段：
+
+userId
+
+username
+
+realName
+
+phone
+
+address
+
+2. 创建 Mapper（UserInfoMapper）
+java
+@Mapper
+public interface UserInfoMapper extends BaseMapper<UserInfo> {
+    @Select("""
+        SELECT
+            u.id AS userId,
+            u.username,
+            i.real_name AS realName,
+            i.phone,
+            i.address
+        FROM sys_user u
+        LEFT JOIN user_info i ON u.id = i.user_id
+        WHERE u.id = #{userId}
+    """)
+    UserDetailVO getUserDetail(@Param("userId") Long userId);
+}
+✅ 三、业务层（Cache-Aside 模式）
+在 UserServiceImpl 中实现：
+java
+private static final String CACHE_KEY_PREFIX = "user:detail:";
+
+@Autowired
+private StringRedisTemplate redisTemplate;
+
+@Override
+public Result<UserDetailVO> getUserDetail(Long userId) {
+    String key = CACHE_KEY_PREFIX + userId;
+
+    // 1. 查缓存
+    String json = redisTemplate.opsForValue().get(key);
+    if (StringUtils.hasText(json)) {
+        try {
+            UserDetailVO cacheVO = JSONUtil.toBean(json, UserDetailVO.class);
+            return Result.success(cacheVO);
+        } catch (Exception e) {
+            redisTemplate.delete(key);
+        }
+    }
+
+    // 2. 查数据库
+    UserDetailVO detail = userInfoMapper.getUserDetail(userId);
+    if (detail == null) {
+        return Result.error(ResultCode.USER_NOT_EXIST);
+    }
+
+    // 3. 写缓存
+    redisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(detail), 10, TimeUnit.MINUTES);
+
+    return Result.success(detail);
+}
+更新/删除时删除缓存（示例）：
+java
+@Override
+@Transactional
+public Result<String> updateUserInfo(Long userId, ...) {
+    // 更新数据库...
+    redisTemplate.delete(CACHE_KEY_PREFIX + userId);
+    return Result.success("更新成功");
+}
+✅ 四、Controller 层
+java
+@GetMapping("/{id}/detail")
+public Result<UserDetailVO> getUserDetail(@PathVariable("id") Long userId) {
+    return userService.getUserDetail(userId);
+}
+
+@PutMapping("/{id}/info")
+public Result<String> updateUserInfo(@PathVariable("id") Long userId, ...) {
+    return userService.updateUserInfo(userId, ...);
+}
+
+@DeleteMapping("/{id}")
+public Result<String> deleteUser(@PathVariable("id") Long userId) {
+    return userService.deleteUser(userId);
+}
+✅ 五、验证 Redis 缓存
+启动 Redis 服务
+
+启动 Spring Boot 项目
+
+调用接口：
+
+text
+GET http://localhost:8080/api/users/1/detail
+观察控制台是否打印 SQL
+
+再次调用同一接口，控制台不应再打印 SQL
+
+查看 Redis 缓存：
+
+bash
+redis-cli
+KEYS user:detail:*
+GET user:detail:1
