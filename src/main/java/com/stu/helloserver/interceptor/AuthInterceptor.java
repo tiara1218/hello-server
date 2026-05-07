@@ -16,10 +16,12 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 获取请求头中的 Token
         String token = request.getHeader(AUTHORIZATION_HEADER);
 
-        // 验证 Token
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        }
+
         if (token == null || token.isEmpty() || !JwtUtil.validateToken(token)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
@@ -32,7 +34,6 @@ public class AuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        // 将用户名存入请求属性中，供后续使用
         String username = JwtUtil.extractUsername(token);
         request.setAttribute("username", username);
 
