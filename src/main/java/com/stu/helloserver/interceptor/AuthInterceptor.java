@@ -9,7 +9,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-@Component
+// @Component
 public class AuthInterceptor implements HandlerInterceptor {
 
     private static final String AUTHORIZATION_HEADER = "Authorization";

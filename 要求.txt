@@ -1,0 +1,98 @@
+ 一、添加依赖
+在 pom.xml 中加入：
+
+xml
+<!-- Spring Security 依赖 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+🧹 二、移除旧鉴权代码
+1. 找到并修改 AuthInterceptorWebConfig（或类似配置类）
+java
+// 旧代码示例（需要移除）
+@Configuration
+public class AuthInterceptorWebConfig implements WebMvcConfigurer {
+    
+    @Autowired
+    private AuthInterceptor authInterceptor;
+    
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // ⬇️ 注释或删除这部分拦截器注册
+        // registry.addInterceptor(authInterceptor)
+        //         .addPathPatterns("/api/**")
+        //         .excludePathPatterns("/api/users/register", "/api/users/login");
+    }
+    
+    // ✅ 保留 CORS 等其他配置（如有）
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOrigins("*")
+                .allowedMethods("*");
+    }
+}
+2. 如果 AuthInterceptor 类不再被其他地方使用，可以删除或注释掉
+java
+// @Component  // 先注释掉
+public class AuthInterceptor implements HandlerInterceptor {
+    // ...
+}
+⚙️ 三、创建 SecurityConfig
+在 config 包下创建 SecurityConfig.java：
+
+java
+package com.example.demo.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            // 1. 关闭 CSRF（JWT 场景不需要）
+            .csrf(csrf -> csrf.disable())
+            
+            // 2. 设置 Session 为无状态（JWT 场景）
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
+            
+            // 3. 授权配置
+            .authorizeHttpRequests(auth -> auth
+                // 放行：注册接口
+                .requestMatchers("/api/users", "/api/users/register").permitAll()
+                // 放行：登录接口
+                .requestMatchers("/api/users/login").permitAll()
+                // 其他所有接口需要认证
+                .anyRequest().authenticated()
+            )
+            
+            // 4. 关闭默认的 HTTP Basic 登录页
+            .httpBasic(httpBasic -> httpBasic.disable())
+            
+            // 5. 关闭表单登录
+            .formLogin(formLogin -> formLogin.disable());
+        
+        return http.build();
+    }
+
+    /**
+     * 密码编码器（用于后续登录时验证密码）
+     */
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+}
