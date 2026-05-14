@@ -6,6 +6,7 @@ import com.stu.helloserver.utils.JwtUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -13,6 +14,9 @@ import org.springframework.web.servlet.HandlerInterceptor;
 public class AuthInterceptor implements HandlerInterceptor {
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
@@ -22,7 +26,7 @@ public class AuthInterceptor implements HandlerInterceptor {
             token = token.substring(7);
         }
 
-        if (token == null || token.isEmpty() || !JwtUtil.validateToken(token)) {
+        if (token == null || token.isEmpty() || !jwtUtil.validateToken(token)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
 
@@ -34,7 +38,7 @@ public class AuthInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        String username = JwtUtil.extractUsername(token);
+        String username = jwtUtil.extractUsername(token);
         request.setAttribute("username", username);
 
         return true;

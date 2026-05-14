@@ -14,7 +14,10 @@ import com.stu.helloserver.service.UserService;
 import com.stu.helloserver.utils.JwtUtil;
 import com.stu.helloserver.vo.UserDetailVO;
 import cn.hutool.json.JSONUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +27,8 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 public class UserServiceImpl implements UserService {
+
+    private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
 
     private static final String CACHE_KEY_PREFIX = "user:detail:";
 
@@ -35,6 +40,9 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private StringRedisTemplate redisTemplate;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     @Override
     public Result<String> register(UserDTO userDTO) {
@@ -68,7 +76,7 @@ public class UserServiceImpl implements UserService {
             return Result.error(ResultCode.PASSWORD_ERROR);
         }
 
-        String token = JwtUtil.generateToken(dbUser.getUsername());
+        String token = jwtUtil.generateToken(dbUser.getUsername());
         return Result.success(token);
     }
 
@@ -92,14 +100,18 @@ public class UserServiceImpl implements UserService {
     public Result<UserDetailVO> getUserDetail(Long userId) {
         String key = CACHE_KEY_PREFIX + userId;
 
-        String json = redisTemplate.opsForValue().get(key);
-        if (StringUtils.hasText(json)) {
-            try {
-                UserDetailVO cacheVO = JSONUtil.toBean(json, UserDetailVO.class);
-                return Result.success(cacheVO);
-            } catch (Exception e) {
-                redisTemplate.delete(key);
+        try {
+            String json = redisTemplate.opsForValue().get(key);
+            if (StringUtils.hasText(json)) {
+                try {
+                    UserDetailVO cacheVO = JSONUtil.toBean(json, UserDetailVO.class);
+                    return Result.success(cacheVO);
+                } catch (Exception e) {
+                    redisTemplate.delete(key);
+                }
             }
+        } catch (RedisConnectionFailureException e) {
+            log.warn("Redis is not available, falling back to database query: {}", e.getMessage());
         }
 
         UserDetailVO detail = userInfoMapper.getUserDetail(userId);
@@ -107,7 +119,11 @@ public class UserServiceImpl implements UserService {
             return Result.error(ResultCode.USER_NOT_EXIST);
         }
 
-        redisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(detail), 10, TimeUnit.MINUTES);
+        try {
+            redisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(detail), 10, TimeUnit.MINUTES);
+        } catch (RedisConnectionFailureException e) {
+            log.warn("Redis is not available, skip caching: {}", e.getMessage());
+        }
 
         return Result.success(detail);
     }
